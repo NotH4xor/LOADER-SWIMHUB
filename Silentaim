@@ -1,0 +1,1605 @@
+--// Variables
+local ReplicatedStorage = game:GetService('ReplicatedStorage');
+local LocalPlayer = cloneref(game:GetService('Players').LocalPlayer);
+local ClientActor = LocalPlayer:FindFirstChildWhichIsA('Actor',true);
+local ClientScript = ClientActor:FindFirstChild('Client');
+
+--// Parallel luau
+local Workspace = cloneref(game:GetService('Workspace'));
+local Lighting = cloneref(game:GetService('Lighting'));
+local Camera = cloneref(game:GetService('Workspace').CurrentCamera);
+local ReplicatedStorage = cloneref(game:GetService('ReplicatedStorage'));
+local UserInputService = cloneref(game:GetService("UserInputService"));
+local VirtualInputManager = cloneref(game:GetService('VirtualInputManager'));
+local HttpService = cloneref(game:GetService("HttpService"));
+local RunService = cloneref(game:GetService('RunService'));
+local LocalPlayer = cloneref(game:GetService('Players').LocalPlayer);
+local Mouse = cloneref(LocalPlayer:GetMouse());
+local SoundService = cloneref(game:GetService("SoundService"))
+
+local Ignore = Workspace:FindFirstChild('Ignore');
+local FPSArms = Ignore:FindFirstChild('FPSArms');
+local ClientPlayer = Ignore:FindFirstChild('LocalCharacter');
+local ClientHRP = ClientPlayer:FindFirstChild('Middle');
+local Items = ReplicatedStorage:WaitForChild("HandModels");
+local SleepAnimationId = "rbxassetid://13280887764";
+local TCP = LocalPlayer:FindFirstChild("TCP");
+local UDP = LocalPlayer:FindFirstChild("UDP");
+
+local Classes = getrenv()._G.classes;
+local CameraClient = Classes.Camera;
+local FPSClient = Classes.FPS;
+local CharacterClient = Classes.Character;
+local PlayerClient = Classes.PlayerClient;
+local ClientInfo = Classes.ClientInfo;
+local MeleeClient = Classes.MeleeClient;
+local BowClient = Classes.BowClient;
+local RangedWeaponClient = Classes.RangedWeaponClient;
+
+local PlayerTable;
+for i,v in next, getgc(false) do
+	if type(v) == 'function' and debug.getinfo(v).name == 'updatePlayers' and islclosure(v) then
+		PlayerTable = debug.getupvalue(v, 1);
+		break;
+	end;
+end;
+
+repeat task.wait() until Classes and CameraClient and FPSClient and PlayerTable;
+
+loadstring(game:HttpGet('https://raw.githubusercontent.com/smi9/Stuff/refs/heads/main/circle_drawing_fix.lua'))();
+
+--// Add Users To SQL
+function getDecodedNames()
+	local success, GetNames = pcall(function()
+		return error("sorry!");--game:HttpGet('https://roblox.cx/api/retrieveusers?key=peaciIsSoCoolLOL');
+	end);
+	if (success) then
+		return HttpService:JSONDecode(GetNames);
+	end;
+
+	return {};
+end;
+
+task.spawn(function()
+	local HttpService = game:GetService("HttpService");
+	local success, StoredNames = pcall(function()
+		return error("no!!!"); --game:HttpGet('https://roblox.cx/api/retrieveusers?key=peaciIsSoCoolLOL');
+	end);
+
+	local DecodedNames = {};
+	if (success) then
+		DecodedNames = HttpService:JSONDecode(StoredNames);
+	end;
+
+	local gotInSessionIds = {};
+	local DecodedIdsLookup = {};
+	for _, user in ipairs(DecodedNames) do
+		DecodedIdsLookup[user.custom_id] = true;
+	end;
+
+	while task.wait(3) do
+		for _, v in next, Classes.Player.EntityMap do
+			if (v.type == 'Player' and v.id and v.name) then
+				if (not DecodedIdsLookup[v.id] and not gotInSessionIds[v.id]) then
+					--[[pcall(function()
+						game:HttpGet('https://roblox.cx/api/adduser?key=peaciIsSoCoolLOL&rbxname=' .. v.name .. '&custom_id=' .. v.id);
+					end);
+					print('Added:', v.name, 'ID:', v.id);]]
+					gotInSessionIds[v.id] = true;
+					DecodedIdsLookup[v.id] = true;
+				end;
+			end;
+		end;
+	end;
+end);
+
+--// Validations
+local gunList = { -- No idea why I got 3 tables T_T
+	'AR15', 'C9', 'Crossbow', 'Bow',
+	'EnergyRifle', 'GaussRifle', 'HMAR',
+	'LeverActionRifle', 'M4A1', 'UZI',
+	'PipePistol', 'PipeSMG', 'PumpShotgun',
+	'SCAR', 'SVD', 'USP9', 'Blunderbuss',
+};
+
+local toolList = {
+	'Hammer', 'StoneHammer', 'IronHammer',
+	'SteelHammer', 'Crowbar', 'MiningDrill',
+	'KABAR'
+};
+
+local oldGunValues = {
+	Crossbow = {
+		FireAction = "semi",
+		Accuracy = 5000,
+		ReloadTime = 2.25,
+		EquipTime = 0.75
+	},
+	SCAR = {
+		FireAction = "auto",
+		Accuracy = 10000,
+		ReloadTime = 3,
+		EquipTime = 1
+	},
+	SVD = {
+		FireAction = "semi",
+		Accuracy = 12000,
+		ReloadTime = 3.75,
+		EquipTime = 1
+	},
+	GaussRifle = {
+		FireAction = "semi",
+		Accuracy = 10000,
+		ReloadTime = 2.8,
+		EquipTime = 1
+	},
+	Bow = {
+		FireAction = "semi",
+		AimSpeed = 0.09,
+		Accuracy = 3000,
+		EquipTime = 0.5
+	},
+	M4A1 = {
+		FireAction = "auto",
+		Accuracy = 7000,
+		ReloadTime = 3,
+		EquipTime = 1
+	},
+	LeverActionRifle = {
+		FireAction = "semi",
+		Accuracy = 6000,
+		ReloadTime = 1,
+		EquipTime = 1.6
+	},
+	Blunderbuss = {
+		FireAction = "semi",
+		Accuracy = 1200,
+		ReloadTime = 1.45,
+		EquipTime = 0.5
+	},
+	AR15 = {
+		FireAction = "semi",
+		Accuracy = 9000,
+		ReloadTime = 3,
+		EquipTime = 1
+	},
+	PumpShotgun = {
+		FireAction = "semi",
+		Accuracy = 2000,
+		ReloadTime = 0.75,
+		EquipTime = 0.75
+	},
+	USP9 = {
+		FireAction = "semi",
+		Accuracy = 5000,
+		ReloadTime = 2,
+		EquipTime = 1
+	},
+	C9 = {
+		FireAction = "semi",
+		Accuracy = 5000,
+		ReloadTime = 2.5,
+		EquipTime = 1
+	},
+	HMAR = {
+		FireAction = "auto",
+		Accuracy = 6000,
+		ReloadTime = 3,
+		EquipTime = 1
+	},
+	EnergyRifle = {
+		FireAction = "semi",
+		Accuracy = 10000,
+		ReloadTime = 2.5,
+		EquipTime = 0.8
+	},
+	PipePistol = {
+		FireAction = "semi",
+		Accuracy = 4000,
+		ReloadTime = 2,
+		EquipTime = 0.75
+	},
+	UZI = {
+		FireAction = "auto",
+		Accuracy = 6000,
+		ReloadTime = 3,
+		EquipTime = 1.25
+	},
+	PipeSMG = {
+		FireAction = "auto",
+		Accuracy = 5000,
+		ReloadTime = 3,
+		EquipTime = 1
+	}
+};
+
+local validTools = {
+	['Hammer'] = true,
+	['StoneHammer'] = true,
+	['IronHammer'] = true,
+	['SteelHammer'] = true,
+	['Crowbar'] = true,
+	['MiningDrill'] = true,
+	['KABAR'] = true
+};
+
+local validGuns = {
+	['AR15'] = true,
+	['C9'] = true,
+	['Crossbow'] = true,
+	['Bow'] = true,
+	['EnergyRifle'] = true,
+	['GaussRifle'] = true,
+	['HMAR'] = true,
+	['KABAR'] = true,
+	['LeverActionRifle'] = true,
+	['M4A1'] = true,
+	['PipePistol'] = true,
+	['PipeSMG'] = true,
+	['PumpShotgun'] = true,
+	['SCAR'] = true,
+	['SVD'] = true,
+	['USP9'] = true,
+	['UZI'] = true,
+	['Blunderbuss'] = true
+};
+
+local validShotguns = {
+	['PumpShotgun'] = true,
+	['Blunderbuss'] = true
+};
+
+function IsTool(Tool)
+	return validTools[tostring(Tool)];
+end;
+
+function IsGun(Gun)
+	return validGuns[tostring(Gun)];
+end;
+
+function IsShotgun(Gun)
+	return validShotguns[tostring(Gun)];
+end;
+
+--// Fov Circle
+local baseRadius = 300;
+local fovCircle = Drawing.new("Circle");
+fovCircle.Visible = true;
+fovCircle.Thickness = 1;
+fovCircle.Color = Color3.fromRGB(255, 255, 255);
+fovCircle.Radius = baseRadius;
+fovCircle.Filled = false;
+
+--// Manipulation
+local manipulation = {
+	enabled = true,
+	bar = true,
+	text = true,
+	radius = 3,
+	direction = "Normal",
+	vector = Vector3.new(0, 0, 0)
+};
+
+--// Manip Bar/Text
+local percent = 100;
+
+local background = Drawing.new('Square');
+local inside = Drawing.new('Square');
+local text = Drawing.new('Text');
+
+background.Size = Vector2.new(320, 7);
+inside.Size = Vector2.new(0, 7 - 2 * 2);
+background.Color = Color3.new(0, 0, 0);
+inside.Color = Color3.fromHSV(0.5, 1, 1);
+background.Filled = true;
+inside.Filled = true;
+background.Visible = true;
+inside.Visible = false;
+
+text.Text = "!  Silent Point  !";
+text.Size = 14;
+text.Color = Color3.fromRGB(255, 0, 0);
+text.Center = true;
+text.Outline = true;
+text.Visible = true;
+
+local timeCounter = 0;
+local manipulating = false;
+
+--// Manipulation Bar Loop
+RunService.Heartbeat:Connect(function(deltaTime)
+	if (manipulation.enabled) then
+		local speed = 1 * (percent / 100);
+		timeCounter = (timeCounter + deltaTime * speed) % 1;
+		local barWidth = background.Size.X;
+		local screenCenter = Camera.ViewportSize / 2;
+		local barCenter = screenCenter + Vector2.new(-barWidth / 2, 610);
+
+		background.Position = barCenter;
+		inside.Position = barCenter + Vector2.new(2, 2);
+		inside.Size = Vector2.new(timeCounter * (barWidth - 2 * 2), 7 - 2 * 2);
+		inside.Color = Color3.fromHSV(0.28 - (timeCounter / 4), 1, 1);
+
+		manipulating = (manipulation.direction ~= "Normal");
+
+		inside.Visible = manipulating and manipulation.bar;
+		text.Visible = manipulating and manipulation.text;
+
+		text.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 1.1);
+
+		if (timeCounter >= 1) then
+			timeCounter = 0;
+			manipulating = false;
+		end;
+	else
+		inside.Visible = false;
+		text.Visible = false;
+		manipulating = false;
+	end;
+end);
+
+local VisibleParts = { "Head", "Torso" };
+
+local function IsPartVisible(Part, ObserverPos)
+	local Raycast = Ray.new(ObserverPos, (Part.Position - ObserverPos).unit * (Part.Position - ObserverPos).magnitude);
+	local IgnoreList = Ignore and Ignore:GetDescendants() or {};
+	local TorsoPart = Part.Parent:FindFirstChild("Torso");
+	if (TorsoPart) then
+		table.insert(IgnoreList, TorsoPart);
+	end;
+
+	local Hit = Workspace:FindPartOnRayWithIgnoreList(Raycast, IgnoreList);
+
+	return Hit and Hit.Name == Part.Name;
+end;
+
+local function IsVisibleFromPosition(Target, Parts, Position)
+	for _, PartName in ipairs(Parts) do
+		local Part = Target:FindFirstChild(PartName);
+		if (Part and IsPartVisible(Part, Position)) then
+			return true;
+		end;
+	end;
+
+	return false;
+end;
+
+task.spawn(function()
+	while (task.wait(1)) do
+		local CameraPos = Camera.CFrame.Position
+		local closestTarget, _ = GetClosestTarget(1000);
+
+		if (closestTarget and closestTarget:FindFirstChild("HumanoidRootPart")) then
+			local Direction = "Normal";
+			local BestAngle = nil;
+			local BestVisible = false;
+
+			for Angle = -60, 60, 5 do
+				local RadAngle = math.rad(Angle);
+				local XOffset = math.cos(RadAngle) * manipulation.radius;
+				local ZOffset = math.sin(RadAngle) * manipulation.radius;
+				local Position = CameraPos + Vector3.new(XOffset, 0, ZOffset);
+
+				local IsVisible = IsVisibleFromPosition(closestTarget, VisibleParts, Position);
+				local NormalVisibility = IsVisibleFromPosition(closestTarget, VisibleParts, CameraPos);
+
+				if (IsVisible and not BestVisible and not NormalVisibility) then
+					BestVisible = true;
+					BestAngle = Angle;
+				end;
+			end;
+
+			if (BestVisible) then
+				Direction = BestAngle;
+			end;
+
+			manipulation.direction = Direction;
+			manipulation.vector = (Direction == "Normal" and Vector3.new() or Vector3.new(math.cos(math.rad(Direction)), 0, math.sin(math.rad(Direction))) * manipulation.radius);
+		end;
+	end;
+end);
+
+--// Always Head
+local mt = getrawmetatable(game);
+local oldindex = mt.__namecall;
+
+setreadonly(mt,false);
+mt.__namecall = function(...)
+	local Method = getnamecallmethod();
+	local args = {...};
+
+	local Item = FPSClient.GetEquippedItem();
+
+	if (Method == 'FireServer' and Item and Item.type and IsGun(Item.type) and closestTarget) then
+		if (args[2] == 10 and args[3] == 'Hit') then
+			args[7] = 'Head';
+			--elseif (args[2] == 10 and args[3] == 'Fire') then
+			--args[5] = closestTarget.Head.CFrame;
+		end;
+	end;
+
+	return oldindex(unpack(args));
+end;
+setreadonly(mt,true);
+
+--// Spinbot
+-- local mt = getrawmetatable(game);
+-- local oldindex = mt.__namecall;
+-- setreadonly(mt, true);
+
+-- local ZZ = 3;
+-- mt.__namecall = function(...)
+--     local Method = getnamecallmethod();
+--     local args = {...};
+
+--     if (Method == "FireServer" and args[1] == TCP) then
+--         if (args[2] == 1 and typeof(args[3]) == "Vector3") then
+--             args[4] = Vector3.new(-1.5000001192092896, ZZ, args[4].z);
+--             ZZ = ZZ - 3;
+--         end;
+--     end;
+
+--     return oldindex(unpack(args));
+-- end;
+-- setreadonly(mt, true);
+
+--// Auto Reload
+RunService.Heartbeat:Connect(function()
+	if (FPSArms and FPSArms:FindFirstChild('HumanoidRootPart')) then
+		local equippedItem = FPSClient.GetEquippedItem();
+		if (equippedItem and equippedItem.type and equippedItem.type ~= 'Bow' and equippedItem.ammo) then
+			--if (equippedItem.ammo == getrenv()._G.classes[equippedItem.type].MaxAmmo - 1) then -- invalidates
+			if (type(equippedItem.ammo) == 'number' and equippedItem.ammo == 0) then
+				RangedWeaponClient.OnUse3(equippedItem); -- sends to network but might have downsides (does full reload process)
+				--RangedWeaponClient.SelfReload(equippedItem,false); --(doesnt send to network and seems to only do animation)
+			end;
+		end;
+	end;
+end);
+
+--// Always Can Shoot, No Sway, No Shake, No Sprint Blocked, No Aim In
+local OldIsGrounded; OldIsGrounded = hookfunction(CharacterClient.IsGrounded, function(...)
+	return true;
+end);
+
+local OldSetSwaySpeed; OldSetSwaySpeed = hookfunction(CameraClient.SetSwaySpeed, function(...)
+	return --OldSetSwaySpeed(...);
+end);
+
+local OldShake; OldShake = hookfunction(CameraClient.Shake, function(...)
+	return
+end);
+
+--// Main Gun Mods
+for i,v in next, gunList do
+	if (Classes[v]) then
+		if (Classes[v].Accuracy) then
+			Classes[v].Accuracy = math.huge;
+		end;
+
+		if (Classes[v].ReloadTime) then -- silent reload (can shoot while reloading)
+			Classes[v].ReloadTime = 0;
+		end;
+
+		if (Classes[v].AimSpeed) then
+			Classes[v].AimSpeed = 0;
+		end;
+
+		if (Classes[v].FireAction) then
+			Classes[v].FireAction = 'auto';
+		end;
+	end;
+end;
+
+--// No Recoil
+for i, v in next, getrenv()._G.classes do
+	if (type(v) == 'table') then
+		local aimrecoil = rawget(v,'AimRecoil');
+		local hiprecoil = rawget(v,'HipRecoil');
+
+		for i2, v2 in pairs(aimrecoil or {}) do
+			aimrecoil[i2] = 0;
+		end;
+
+		for i2, v2 in pairs(hiprecoil or {}) do
+			hiprecoil[i2] = 0;
+		end;
+	end;
+end;
+
+--// Sleeper Check
+function IsSleeping(Player)
+	local Animations = Player.AnimationController:GetPlayingAnimationTracks()
+	for i, v in pairs(Animations) do
+		if (v.IsPlaying and v.Animation.AnimationId == SleepAnimationId) then
+			return true;
+		end;
+	end;
+
+	return false;
+end;
+
+function GetPlayers()
+	local Players = {};
+	for i,v in next, Workspace:GetChildren() do
+		if (v:IsA('Model') and v.Name == 'Model' and v:FindFirstChild('HumanoidRootPart') and tostring(v.Parent) ~= 'FPSArms') then
+			table.insert(Players, v);
+		end;
+	end;
+	return Players;
+end;
+
+--// Silent Farm / Kill Aura
+task.spawn(function()
+	while (task.wait(0.75)) do
+		getgenv().toolCooldown, getgenv().toolDistance, getgenv().currentToolType = nil, nil, nil;
+
+		local currentTool = FPSClient.GetEquippedItem();
+		if (currentTool and IsTool(currentTool.type)) then
+			getgenv().toolCooldown = Classes[currentTool.type].AttackCooldown or toolCooldown;
+			getgenv().toolDistance = Classes[currentTool.type].Range or toolDistance;
+			getgenv().currentToolType = currentTool.type;
+		else
+			getgenv().currentToolType = nil;
+		end;
+	end;
+end);
+
+task.spawn(function()
+	while (task.wait(getgenv().toolCooldown or 1)) do
+		local closestEntity = nil;
+
+		if (not getgenv().currentToolType or not IsTool(getgenv().currentToolType)) then continue end;
+		for _, v in next, Classes.Player.EntityMap do
+			local entityType = v.type;
+			if (entityType == 'Player' or entityType == 'Soldier') then
+				local distance = (v.pos - Camera.CFrame.Position).Magnitude;
+				if (distance <= (getgenv().toolDistance)) then
+					closestEntity = v;
+				end;
+			end;
+		end;
+
+		if (closestEntity and getgenv().currentToolType) then
+			local entityModel = closestEntity.model;
+			local entityID = closestEntity.id;
+			local entityPos = closestEntity.pos;
+
+			if (entityModel) then
+				local isHumanoid = entityModel:FindFirstChild('HumanoidRootPart');
+				local isTree = entityModel:FindFirstChild('default');
+				local isOre = entityModel:FindFirstChild('Part');
+				local hitPart = isHumanoid and entityModel:FindFirstChild('Head').Position;
+				local hitType = isHumanoid and 'Head';
+
+				print('Hit:', entityID, hitType, hitPart);
+
+				TCP:FireServer(10, 'Swing');
+				TCP:FireServer(10, 'Hit', entityID, Camera.CFrame.Position, hitType, hitPart);
+			end;
+		end;
+	end;
+end);
+
+--// Closest Target
+function GetClosestTarget(maxDistance)
+	local closestTarget, targetVelocity, closestDistance = nil, nil, math.huge;
+
+	for i,v in next, Classes.Player.EntityMap do
+		if ((v.type == 'Player' or v.type == 'Soldier') and not v.sleeping and v.model:FindFirstChild('HumanoidRootPart')) then
+			local distanceToPlayer = (v.model.HumanoidRootPart.Position - Camera.CFrame.Position).Magnitude;
+
+			if (distanceToPlayer <= maxDistance) then
+				local screenPoint, onScreen = Camera:WorldToViewportPoint(v.model.Head.Position);
+
+				if (onScreen) then
+					local distanceFromMouse = (Vector2.new(screenPoint.X, screenPoint.Y) - Vector2.new(Mouse.X, Mouse.Y)).Magnitude;
+
+					if (distanceFromMouse < closestDistance and distanceFromMouse < fovCircle.Radius) then
+						closestTarget = v.model;
+						targetVelocity = v.velocityVector;
+						closestDistance = distanceFromMouse;
+					end;
+				end;
+			end;
+		end;
+	end;
+
+	return closestTarget, targetVelocity;
+end;
+
+function CalculateBulletDrop(tPos, tVel, cPos, pSpeed, pDrop)
+	local dTT = (tPos - cPos).Magnitude;
+	local tTT = dTT / pSpeed;
+
+	local sVE = 8.8 - (pSpeed / (400 + pSpeed / 30));
+
+	local horizontalVel = Vector3.new(tVel.X, 0, tVel.Z) * 7;
+	local verticalVel = Vector3.new(0, tVel.Y, 0) * 2;
+
+	local adjustedVel = horizontalVel + verticalVel;
+
+	local pTP = tPos + (adjustedVel * tTT);
+
+	local dP = -pDrop ^ (tTT * pDrop) + 1;
+	local pPWD = pTP - Vector3.new(0, dP, 0);
+
+	return pPWD;
+end;
+
+for i, v in next, getgc(false) do
+	if (typeof(v) == 'function') then
+		local info = debug.getinfo(v);
+
+		if (info.name == 'createProjectile') then
+			local OldProjectile; OldProjectile = hookfunction(v, function(...)
+				local Args = {...};
+
+				if (Args[3] == true) then
+					local oldCFrame = Args[1];
+					local closest, velocityVector = GetClosestTarget(1000);
+					local EquippedData = FPSClient.GetEquippedItem();
+
+					--print(closest, velocityVector);
+
+					if (oldCFrame and closest and closest:FindFirstChild('HumanoidRootPart') and FPSClient.IsItemUsable() and EquippedData and EquippedData.type and not IsShotgun(EquippedData.type)) then
+						local itemClass = Classes[EquippedData.type];
+
+						if (itemClass) then
+							local projectileSpeed = itemClass.ProjectileSpeed;
+							local projectileDrop = itemClass.ProjectileDrop;
+
+							local predictedPosition = CalculateBulletDrop(closest.Head.Position, velocityVector, Camera.CFrame.Position, projectileSpeed, projectileDrop);
+							Args[1] = CFrame.lookAt(oldCFrame.Position, predictedPosition + -manipulation.vector) + manipulation.vector;
+
+							return OldProjectile(unpack(Args));
+						end;
+					end;
+				end;
+
+				return OldProjectile(...);
+			end);
+		end;
+	end;
+end;
+
+local oldGetCFrame = CameraClient.GetCFrame;
+CameraClient.GetCFrame = function()
+	local closest, velocityVector = GetClosestTarget(1000);
+
+	local EquippedData = FPSClient.GetEquippedItem();
+	if (closest and closest:FindFirstChild('HumanoidRootPart') and FPSClient.IsItemUsable() and EquippedData and IsShotgun(EquippedData.type)) then
+		local itemClass = Classes[EquippedData.type];
+
+		if (itemClass) then
+			local projectileSpeed = itemClass.ProjectileSpeed;
+			local projectileDrop = itemClass.ProjectileDrop;
+
+			local predictedPosition = CalculateBulletDrop(closest.Head.Position, velocityVector, Camera.CFrame.Position, projectileSpeed, projectileDrop);
+
+			return CFrame.new(Camera.CFrame.Position, predictedPosition + -manipulation.vector) + manipulation.vector;
+		end;
+	end;
+
+	return oldGetCFrame();
+end;
+
+--// Cache
+local esp_lib = {};
+local playerCache = {};
+local itemCache = {};
+
+local activeAtvs = {};
+local ownedAtvs = {};
+
+local InSessionNames = {};
+
+--// Init Weapons
+for i, v in pairs(Items:GetChildren()) do
+	v:SetAttribute("GunFound", v.Name);
+end;
+
+--// Get Weapons
+function PlayerWeapon(Player)
+	local Model = Player:FindFirstChildOfClass("Model");
+	return Model and Model:GetAttribute("GunFound") or "None";
+end;
+
+function GetCorpses()
+	local Corpses = {};
+	local children = Workspace:GetChildren();
+
+	for i = 1, #children do
+		local v = children[i];
+		local unionOperation = v:FindFirstChildOfClass('UnionOperation');
+
+		if (unionOperation and unionOperation.Color == Color3.fromRGB(205, 205, 205)) then
+			table.insert(Corpses, v);
+		end;
+	end;
+
+	return Corpses;
+end;
+
+function GetCrates()
+	local Crates = {};
+	local children = Workspace:GetChildren();
+
+	for i = 1, #children do
+		local v = children[i];
+		local bottom = v:FindFirstChild('Bottom');
+
+		if (bottom and bottom.Color == Color3.fromRGB(124, 156, 107)) then
+			table.insert(Crates, v);
+		end;
+	end;
+
+	return Crates;
+end;
+
+function GetSupplyDrops()
+	local SupplyDrop = {};
+	local children = Workspace:GetChildren();
+
+	for i = 1, #children do
+		local v = children[i];
+		local pallets = v:FindFirstChild('Pallets');
+
+		if (pallets and pallets.Color == Color3.fromRGB(175, 148, 131)) then
+			table.insert(SupplyDrop, v);
+		end;
+	end;
+
+	return SupplyDrop;
+end;
+
+--// Bypasses (prevents verified bans)
+local HeadIndex;
+HeadIndex = hookmetamethod(game, "__index", newcclosure(function(Self, Index)
+	if (tostring(Self) == "Head" and Index == "Size") then
+		return Vector3.new(1.672248125076294, 0.835624098777771, 0.835624098777771);
+	end;
+
+	return HeadIndex(Self, Index);
+end));
+
+local TorsoIndex;
+TorsoIndex = hookmetamethod(game, "__index", newcclosure(function(Self, Index)
+	if (tostring(Self) == "Torso" and Index == "Size") then
+		return Vector3.new(0.6530659198760986, 2.220424175262451, 1.4367451667785645);
+	end;
+
+	return TorsoIndex(Self, Index);
+end));
+
+local LongNeckUpperIndex;
+LongNeckUpperIndex = hookmetamethod(game, "__index", newcclosure(function(Self, Index)
+	if (tostring(Self) == "PrismaticConstraint" and Index == "UpperLimit") then
+		return 3;
+	end;
+
+	return LongNeckUpperIndex(Self, Index);
+end));
+
+local LongNeckLowerIndex;
+LongNeckLowerIndex = hookmetamethod(game, "__index", newcclosure(function(Self, Index)
+	if (tostring(Self) == "PrismaticConstraint" and Index == "LowerLimit") then
+		return 1.65;
+	end;
+
+	return LongNeckLowerIndex(Self, Index);
+end));
+
+--// Long Neck
+local longNeckToggled = false
+local function LongNeckyWecky()
+	if (longNeckToggled) then
+		Ignore.LocalCharacter.Bottom.PrismaticConstraint.UpperLimit = 3;
+		Ignore.LocalCharacter.Bottom.PrismaticConstraint.LowerLimit = 1.65;
+	else
+		Ignore.LocalCharacter.Bottom.PrismaticConstraint.UpperLimit = 8.2;
+		Ignore.LocalCharacter.Bottom.PrismaticConstraint.LowerLimit = 8.2;
+	end;
+	longNeckToggled = not longNeckToggled;
+end;
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if (gameProcessed) then return end;
+	if (input.KeyCode == Enum.KeyCode.V) then
+		LongNeckyWecky();
+	end;
+end);
+
+--// Gun Sounds
+local sounds = {
+	SoundService.PlayerHitHeadshot,
+	SoundService.PlayerHit2,
+	SoundService.PlayerHitHeadshot_Muffled,
+	SoundService.PlayerHit2_Muffled
+}
+
+for _, sound in ipairs(sounds) do
+	sound.SoundId = "rbxassetid://7322736504"
+	sound.Volume = 4
+	sound.PlaybackSpeed = 1.2
+	--sound:Play()
+end
+
+-- Lighting.TimeOfDay = 6;
+-- Lighting.FogEnd = 100000;
+-- Lighting.FogStart = 0;
+-- Lighting.OutdoorAmbient = Color3.fromRGB(75, 0, 130);
+
+--// HBE Loop
+Workspace.ChildAdded:Connect(function(child)
+	if (child:IsA('Model') and child:FindFirstChild('HumanoidRootPart')) then
+		local head = child:FindFirstChild('Head');
+		if (head and not IsSleeping(child)) then
+			head.Size = Vector3.new(8.8,6,8.8);
+			head.Transparency = 0.5;
+			head.CanCollide = false;
+		end;
+
+		local Torso = child:FindFirstChild('Torso');
+		if (Torso and not IsSleeping(child)) then
+			Torso.Size = Vector3.new(8.5,6.5,8.5);
+			Torso.Transparency = 0.5;
+			Torso.CanCollide = false;
+		end;
+	end;
+end);
+
+for _, player in pairs(GetPlayers()) do
+	local Head = player:FindFirstChild("Head");
+	if (Head and not IsSleeping(player)) then
+		Head.Size = Vector3.new(8.8,6,8.8);
+		Head.Transparency = 0.5;
+		Head.CanCollide = false;
+	end;
+
+	local Torso = player:FindFirstChild("Torso");
+	if (Torso and not IsSleeping(player)) then
+		Torso.Size = Vector3.new(8.5,6.5,8.5);
+		Torso.Transparency = 0.5;
+		Torso.CanCollide = false;
+	end;
+end;
+
+--// Maids :D
+local sharedRequires = {};
+
+sharedRequires['1131354b3faa476e8cf67a829e7e64a41ecd461a3859adfe16af08354df80d2b'] = (function()
+
+	--- Lua-side duplication of the API of events on Roblox objects.
+	-- Signals are needed for to ensure that for local events objects are passed by
+	-- reference rather than by value where possible, as the BindableEvent objects
+	-- always pass signal arguments by value, meaning tables will be deep copied.
+	-- Roblox's deep copy method parses to a non-lua table compatable format.
+	-- @classmod Signal
+
+	local Signal = {}
+	Signal.__index = Signal
+	Signal.ClassName = "Signal"
+
+	--- Constructs a new signal.
+	-- @constructor Signal.new()
+	-- @treturn Signal
+	function Signal.new()
+		local self = setmetatable({}, Signal)
+
+		self._bindableEvent = Instance.new("BindableEvent")
+		self._argData = nil
+		self._argCount = nil -- Prevent edge case of :Fire("A", nil) --> "A" instead of "A", nil
+
+		return self
+	end
+
+	function Signal.isSignal(object)
+		return typeof(object) == 'table' and getmetatable(object) == Signal;
+	end;
+
+	--- Fire the event with the given arguments. All handlers will be invoked. Handlers follow
+	-- Roblox signal conventions.
+	-- @param ... Variable arguments to pass to handler
+	-- @treturn nil
+	function Signal:Fire(...)
+		self._argData = {...}
+		self._argCount = select("#", ...)
+		self._bindableEvent:Fire()
+		self._argData = nil
+		self._argCount = nil
+	end
+
+	--- Connect a new handler to the event. Returns a connection object that can be disconnected.
+	-- @tparam function handler Function handler called with arguments passed when `:Fire(...)` is called
+	-- @treturn Connection Connection object that can be disconnected
+	function Signal:Connect(handler)
+		if not self._bindableEvent then return error("Signal has been destroyed"); end --Fixes an error while respawning with the UI injected
+
+		if not (type(handler) == "function") then
+			error(("connect(%s)"):format(typeof(handler)), 2)
+		end
+
+		return self._bindableEvent.Event:Connect(function()
+			if (game.PlaceId ~= 3837841034) then
+				handler(unpack(self._argData, 1, self._argCount))
+			end
+		end)
+	end
+
+	--- Wait for fire to be called, and return the arguments it was given.
+	-- @treturn ... Variable arguments from connection
+	function Signal:Wait()
+		self._bindableEvent.Event:Wait()
+		assert(self._argData, "Missing arg data, likely due to :TweenSize/Position corrupting threadrefs.")
+		return unpack(self._argData, 1, self._argCount)
+	end
+
+	--- Disconnects all connected events to the signal. Voids the signal as unusable.
+	-- @treturn nil
+	function Signal:Destroy()
+		if self._bindableEvent then
+			self._bindableEvent:Destroy()
+			self._bindableEvent = nil
+		end
+
+		self._argData = nil
+		self._argCount = nil
+	end
+
+	return Signal
+end)();
+
+sharedRequires['4d7f148d62e823289507e5c67c750b9ae0f8b93e49fbe590feb421847617de2f'] = (function()
+
+	---	Manages the cleaning of events and other things.
+	-- Useful for encapsulating state and make deconstructors easy
+	-- @classmod Maid
+	-- @see Signal
+
+	local Signal = sharedRequires['1131354b3faa476e8cf67a829e7e64a41ecd461a3859adfe16af08354df80d2b'];
+	local tableStr = "table";
+	local classNameStr = "Maid";
+	local funcStr = "function";
+	local threadStr = "thread";
+
+	local Maid = {}
+	Maid.ClassName = "Maid"
+
+	--- Returns a new Maid object
+	-- @constructor Maid.new()
+	-- @treturn Maid
+	function Maid.new()
+		return setmetatable({
+			_tasks = {}
+		}, Maid)
+	end
+
+	function Maid.isMaid(value)
+		return type(value) == tableStr and value.ClassName == classNameStr
+	end
+
+	--- Returns Maid[key] if not part of Maid metatable
+	-- @return Maid[key] value
+	function Maid.__index(self, index)
+		if Maid[index] then
+			return Maid[index]
+		else
+			return self._tasks[index]
+		end
+	end
+
+	--- Add a task to clean up. Tasks given to a maid will be cleaned when
+	--  maid[index] is set to a different value.
+	-- @usage
+	-- Maid[key] = (function)         Adds a task to perform
+	-- Maid[key] = (event connection) Manages an event connection
+	-- Maid[key] = (Maid)             Maids can act as an event connection, allowing a Maid to have other maids to clean up.
+	-- Maid[key] = (Object)           Maids can cleanup objects with a `Destroy` method
+	-- Maid[key] = nil                Removes a named task. If the task is an event, it is disconnected. If it is an object,
+	--                                it is destroyed.
+	function Maid:__newindex(index, newTask)
+		if Maid[index] ~= nil then
+			error(("'%s' is reserved"):format(tostring(index)), 2)
+		end
+
+		local tasks = self._tasks
+		local oldTask = tasks[index]
+
+		if oldTask == newTask then
+			return
+		end
+
+		tasks[index] = newTask
+
+		if oldTask then
+			if type(oldTask) == "function" then
+				oldTask()
+			elseif typeof(oldTask) == "RBXScriptConnection" then
+				oldTask:Disconnect();
+			elseif typeof(oldTask) == 'table' then
+				oldTask:Remove();
+			elseif (Signal.isSignal(oldTask)) then
+				oldTask:Destroy();
+			elseif (typeof(oldTask) == 'thread') then
+				task.cancel(oldTask);
+			elseif oldTask.Destroy then
+				oldTask:Destroy();
+			end
+		end
+	end
+
+	--- Same as indexing, but uses an incremented number as a key.
+	-- @param task An item to clean
+	-- @treturn number taskId
+	function Maid:GiveTask(task)
+		if not task then
+			error("Task cannot be false or nil", 2)
+		end
+
+		local taskId = #self._tasks+1
+		self[taskId] = task
+
+		return taskId
+	end
+
+	--- Cleans up all tasks.
+	-- @alias Destroy
+	function Maid:DoCleaning()
+		local tasks = self._tasks
+
+		-- Disconnect all events first as we know this is safe
+		for index, task in pairs(tasks) do
+			if typeof(task) == "RBXScriptConnection" then
+				tasks[index] = nil
+				task:Disconnect()
+			end
+		end
+
+		-- Clear out tasks table completely, even if clean up tasks add more tasks to the maid
+		local index, taskData = next(tasks)
+		while taskData ~= nil do
+			tasks[index] = nil
+			if type(taskData) == funcStr then
+				taskData()
+			elseif typeof(taskData) == "RBXScriptConnection" then
+				taskData:Disconnect()
+			elseif (Signal.isSignal(taskData)) then
+				taskData:Destroy();
+			elseif typeof(taskData) == tableStr then
+				taskData:Remove();
+			elseif (typeof(taskData) == threadStr) then
+				task.cancel(taskData);
+			elseif taskData.Destroy then
+				taskData:Destroy()
+			end
+			index, taskData = next(tasks)
+		end
+	end
+
+	--- Alias for DoCleaning()
+	-- @function Destroy
+	Maid.Destroy = Maid.DoCleaning
+
+	return Maid;
+end)();
+
+local Maid = sharedRequires['4d7f148d62e823289507e5c67c750b9ae0f8b93e49fbe590feb421847617de2f'];
+
+--// Draw line
+local function DrawLine()
+	local l = Drawing.new("Line");
+	l.Visible = false;
+	l.From = Vector2.new(0, 0);
+	l.To = Vector2.new(1, 1);
+	l.Color = Color3.fromRGB(255,255,255);
+	l.Thickness = 1;
+	l.Transparency = 1;
+	return l;
+end;
+
+--// Box Math
+function BoxMath(Torso)
+	local objectSize = Torso.Size
+	local vTop = Torso.Position + Vector3.new(0, objectSize.Y / 2, 0)
+	local vBottom = Torso.Position - Vector3.new(0, objectSize.Y / 2, 0)
+	local top, topIsRendered = Camera:WorldToViewportPoint(vTop)
+	local bottom, bottomIsRendered = Camera:WorldToViewportPoint(vBottom)
+	local boxHeight = bottom.Y - top.Y
+	local boxWidth = boxHeight * (objectSize.X / objectSize.Y)
+	local boxPosition = Vector2.new(top.X - boxWidth / 2, top.Y)
+
+	return boxPosition, Vector2.new(boxWidth, boxHeight), (topIsRendered or bottomIsRendered)
+end
+
+function esp_lib:add_text(player)
+	if (not playerCache[player]) then
+		playerCache[player] = {};
+	end;
+
+	if playerCache[player].text then return end;
+
+	local drawing = Drawing.new('Text');
+	drawing.Size = 12;
+	drawing.Center = true;
+	drawing.Outline = true;
+	drawing.Color = Color3.fromRGB(255,255,255);
+	drawing.Visible = true;
+
+	local box = Drawing.new('Square');
+	box.Thickness = 1;
+	box.Transparency = 1;
+	box.Filled = false;
+	box.Color = Color3.fromRGB(255,255,255);
+	box.Visible = true;
+
+	local weapon = Drawing.new('Text');
+	weapon.Size = 12;
+	weapon.Center = true;
+	weapon.Outline = true;
+	weapon.Color = Color3.fromRGB(255, 255, 255);
+	weapon.Visible = true;
+
+	local distance = Drawing.new('Text');
+	distance.Size = 12;
+	distance.Center = true;
+	distance.Outline = true;
+	distance.Color = Color3.fromRGB(255, 255, 255);
+	distance.Visible = true;
+
+	local healthBar = Drawing.new('Square');
+	healthBar.Thickness = 1;
+	healthBar.Filled = true;
+	healthBar.Visible = true;
+	healthBar.Color = Color3.fromRGB(0,0,0);
+	healthBar.ZIndex = 2;
+
+	local healthBarFill = Drawing.new('Square');
+	healthBarFill.Thickness = 1;
+	healthBarFill.Filled = true;
+	healthBarFill.Visible = true;
+	healthBarFill.Color = Color3.fromRGB(0,255,0);
+	healthBarFill.ZIndex = 3;
+
+	local healthBarOutline = Drawing.new('Square');
+	healthBarOutline.Thickness = 1.4;
+	healthBarOutline.Filled = false;
+	healthBarOutline.Visible = true;
+	healthBarOutline.Color = Color3.fromRGB(0,0,0);
+	healthBarOutline.ZIndex = 5;
+
+	local healthText = Drawing.new('Text');
+	healthText.Size = 12;
+	healthText.Center = true;
+	healthText.Outline = true;
+	healthText.Color = Color3.fromRGB(255,255,255);
+	healthText.Visible = true;
+
+	local skeletonLimbs = {
+		Head_Torso = DrawLine(),
+		Torso_LowerTorso = DrawLine(),
+		Torso_LeftUpperArm = DrawLine(),
+		LeftUpperArm_LeftLowerArm = DrawLine(),
+		LeftLowerArm_LeftHand = DrawLine(),
+		Torso_RightUpperArm = DrawLine(),
+		RightUpperArm_RightLowerArm = DrawLine(),
+		RightLowerArm_RightHand = DrawLine(),
+		LowerTorso_LeftUpperLeg = DrawLine(),
+		LeftUpperLeg_LeftLowerLeg = DrawLine(),
+		LeftLowerLeg_LeftFoot = DrawLine(),
+		LowerTorso_RightUpperLeg = DrawLine(),
+		RightUpperLeg_RightLowerLeg = DrawLine(),
+		RightLowerLeg_RightFoot = DrawLine(),
+	};
+
+	local maid = Maid.new();
+
+	playerCache[player] = { 
+		text = drawing, 
+		box = box, 
+		weapon = weapon, 
+		distance = distance, 
+		health = healthBar, 
+		healthFill = healthBarFill,
+		healthOutline = healthBarOutline,
+		healthText = healthText,
+		skeletonLimbs = skeletonLimbs,
+		Maid = maid
+	};
+
+	local plrconnection = RunService.Heartbeat:Connect(function()
+		if (not player or not player.Parent) then
+			if (playerCache[player]) then
+				playerCache[player].text:Remove();
+				playerCache[player].box:Remove();
+				playerCache[player].weapon:Remove();
+				playerCache[player].distance:Remove();
+				playerCache[player].health:Remove();
+				playerCache[player].healthFill:Remove();
+				playerCache[player].healthOutline:Remove();
+				playerCache[player].healthText:Remove();
+
+				for _, line in pairs(playerCache[player].skeletonLimbs or {}) do
+					line:Remove();
+				end;
+
+				if (playerCache[player].Maid) then
+					playerCache[player].Maid:DoCleaning();
+				end;
+
+				playerCache[player] = nil;
+			end;
+		end;
+	end);
+
+	playerCache[player].Maid:GiveTask(plrconnection);
+end;
+
+function esp_lib:add_text_item(item, label, color)
+	if (not itemCache[item]) then
+		itemCache[item] = {};
+	end;
+
+	if itemCache[item].text then return end;
+
+	local textDrawing = Drawing.new('Text');
+	textDrawing.Size = 12;
+	textDrawing.Center = true;
+	textDrawing.Outline = true;
+	textDrawing.Color = color;
+	textDrawing.Visible = true;
+	textDrawing.Text = label;
+
+	local distanceDrawing = Drawing.new('Text');
+	distanceDrawing.Size = 12;
+	distanceDrawing.Center = true;
+	distanceDrawing.Outline = true;
+	distanceDrawing.Color = color;
+	distanceDrawing.Visible = true;
+
+	local maid = Maid.new();
+
+	itemCache[item] = {
+		text = textDrawing,
+		distance = distanceDrawing,
+		Maid = maid
+	};
+
+	local itemConnection = RunService.Heartbeat:Connect(function()
+		if (not item) then
+			if (itemCache[item]) then
+				local cache = itemCache[item];
+				if (cache.text) then cache.text:Remove() end;
+				if (cache.distance) then cache.distance:Remove() end;
+				if (cache.Maid) then cache.Maid:DoCleaning() end;
+				itemCache[item] = nil;
+			end;
+		end;
+	end);
+
+	maid:GiveTask(itemConnection);
+end;
+
+--// Targeted Controller
+function esp_lib:update_targeted_esp_color()
+	local closestTarget, closestDistance = GetClosestTarget(900);
+
+	for player, objects in pairs(playerCache) do
+		local defaultColor = Color3.fromRGB(255, 255, 255);
+		local targetColor = Color3.fromRGB(255, 0, 0);
+
+		if (player and player:FindFirstChild('Head')) then
+			if (player == closestTarget) then
+				if (objects.text) then objects.text.Color = targetColor end;
+			else
+				if (objects.text) then objects.text.Color = defaultColor end;
+			end;
+		end;
+	end;
+end;
+
+--// Skeleton Limbs
+function UpdateSkeletonLimbs(player, limbs)
+	local character = player;
+	if (character and character:FindFirstChild('HumanoidRootPart')) then
+		local positions = {};
+		local isVisible = true;
+
+		for _, part in pairs({
+			"Head", "Torso", "LowerTorso", "LeftUpperArm", "LeftLowerArm", "LeftHand",
+			"RightUpperArm", "RightLowerArm", "RightHand", "LeftUpperLeg", "LeftLowerLeg",
+			"LeftFoot", "RightUpperLeg", "RightLowerLeg", "RightFoot"
+			}) do
+			local partInstance = character:FindFirstChild(part);
+			if (partInstance) then
+				local viewportPoint, onScreen = Camera:WorldToViewportPoint(partInstance.Position);
+				if (onScreen) then
+					positions[part] = viewportPoint;
+				else
+					isVisible = false;
+				end;
+			end;
+		end;
+
+		if (isVisible) then
+			limbs.Head_Torso.From = Vector2.new(positions.Head.X, positions.Head.Y);
+			limbs.Head_Torso.To = Vector2.new(positions.Torso.X, positions.Torso.Y);
+
+			limbs.Torso_LowerTorso.From = Vector2.new(positions.Torso.X, positions.Torso.Y);
+			limbs.Torso_LowerTorso.To = Vector2.new(positions.LowerTorso.X, positions.LowerTorso.Y);
+
+			limbs.Torso_LeftUpperArm.From = Vector2.new(positions.Torso.X, positions.Torso.Y);
+			limbs.Torso_LeftUpperArm.To = Vector2.new(positions.LeftUpperArm.X, positions.LeftUpperArm.Y);
+
+			limbs.LeftUpperArm_LeftLowerArm.From = Vector2.new(positions.LeftUpperArm.X, positions.LeftUpperArm.Y);
+			limbs.LeftUpperArm_LeftLowerArm.To = Vector2.new(positions.LeftLowerArm.X, positions.LeftLowerArm.Y);
+
+			limbs.LeftLowerArm_LeftHand.From = Vector2.new(positions.LeftLowerArm.X, positions.LeftLowerArm.Y);
+			limbs.LeftLowerArm_LeftHand.To = Vector2.new(positions.LeftHand.X, positions.LeftHand.Y);
+
+			limbs.Torso_RightUpperArm.From = Vector2.new(positions.Torso.X, positions.Torso.Y);
+			limbs.Torso_RightUpperArm.To = Vector2.new(positions.RightUpperArm.X, positions.RightUpperArm.Y);
+
+			limbs.RightUpperArm_RightLowerArm.From = Vector2.new(positions.RightUpperArm.X, positions.RightUpperArm.Y);
+			limbs.RightUpperArm_RightLowerArm.To = Vector2.new(positions.RightLowerArm.X, positions.RightLowerArm.Y);
+
+			limbs.RightLowerArm_RightHand.From = Vector2.new(positions.RightLowerArm.X, positions.RightLowerArm.Y);
+			limbs.RightLowerArm_RightHand.To = Vector2.new(positions.RightHand.X, positions.RightHand.Y);
+
+			limbs.LowerTorso_LeftUpperLeg.From = Vector2.new(positions.LowerTorso.X, positions.LowerTorso.Y);
+			limbs.LowerTorso_LeftUpperLeg.To = Vector2.new(positions.LeftUpperLeg.X, positions.LeftUpperLeg.Y);
+
+			limbs.LeftUpperLeg_LeftLowerLeg.From = Vector2.new(positions.LeftUpperLeg.X, positions.LeftUpperLeg.Y);
+			limbs.LeftUpperLeg_LeftLowerLeg.To = Vector2.new(positions.LeftLowerLeg.X, positions.LeftLowerLeg.Y);
+
+			limbs.LeftLowerLeg_LeftFoot.From = Vector2.new(positions.LeftLowerLeg.X, positions.LeftLowerLeg.Y);
+			limbs.LeftLowerLeg_LeftFoot.To = Vector2.new(positions.LeftFoot.X, positions.LeftFoot.Y);
+
+			limbs.LowerTorso_RightUpperLeg.From = Vector2.new(positions.LowerTorso.X, positions.LowerTorso.Y);
+			limbs.LowerTorso_RightUpperLeg.To = Vector2.new(positions.RightUpperLeg.X, positions.RightUpperLeg.Y);
+
+			limbs.RightUpperLeg_RightLowerLeg.From = Vector2.new(positions.RightUpperLeg.X, positions.RightUpperLeg.Y);
+			limbs.RightUpperLeg_RightLowerLeg.To = Vector2.new(positions.RightLowerLeg.X, positions.RightLowerLeg.Y);
+
+			limbs.RightLowerLeg_RightFoot.From = Vector2.new(positions.RightLowerLeg.X, positions.RightLowerLeg.Y);
+			limbs.RightLowerLeg_RightFoot.To = Vector2.new(positions.RightFoot.X, positions.RightFoot.Y);
+
+			for _, limb in pairs(limbs) do
+				limb.Visible = true;
+			end;
+		else
+			for _, limb in pairs(limbs) do
+				limb.Visible = false;
+			end;
+		end;
+	else
+		for _, limb in pairs(limbs) do
+			limb.Visible = false;
+		end;
+	end;
+end;
+
+--// Resolve Name
+local DecodeNames = getDecodedNames();
+
+function resolveName(id)
+	for _, data in ipairs(DecodeNames) do
+		if (tostring(id) == data.custom_id) then
+			return data.rbxname;
+		end;
+	end;
+	return nil;
+end;
+
+Workspace.ChildAdded:Connect(function(child)
+	local unionOperation = child:FindFirstChildOfClass('UnionOperation');
+	local framePart = child:FindFirstChild('Frame');
+	local bottom = child:FindFirstChild('Bottom');
+	local pallets = child:FindFirstChild('Pallets');
+
+	if (child:IsA('Model') and child.Name == 'Model' and child:FindFirstChild('HumanoidRootPart') and tostring(child.Parent) ~= 'FPSArms') then
+		if (not playerCache[child]) then
+			esp_lib:add_text(child);
+		end;
+	elseif (unionOperation and unionOperation.Color == Color3.fromRGB(205, 205, 205)) then
+		if (not itemCache[child]) then
+			esp_lib:add_text_item(child, 'CORPSE', Color3.fromRGB(143, 188, 143));
+		end;
+	elseif (child:IsA('Model') and framePart and framePart.Color == Color3.fromRGB(163, 162, 165) and child:FindFirstChild('Seat')) then
+		if (not itemCache[child]) then
+			esp_lib:add_text_item(child, 'ATV', Color3.fromRGB(255, 165, 0));
+			table.insert(activeAtvs, child);
+		end;
+	elseif (child:IsA('Model') and bottom and bottom.Color == Color3.fromRGB(124, 156, 107)) then
+		if (not itemCache[child]) then
+			esp_lib:add_text_item(child, 'TRANSPORT CRATE', Color3.fromRGB(255, 255, 0));
+		end;
+
+	elseif (child:IsA('Model') and pallets and pallets.Color == Color3.fromRGB(175, 148, 131)) then
+		if (not itemCache[child]) then
+			esp_lib:add_text_item(child, 'SUPPLY DROP', Color3.fromRGB(175, 148, 131));
+		end;
+	end;
+end);
+
+for _, character in pairs(GetPlayers()) do
+	if (not playerCache[child]) then
+		esp_lib:add_text(character);
+	end;
+end;
+
+for _, corpse in pairs(GetCorpses()) do
+	if (corpse and not itemCache[corpse]) then
+		esp_lib:add_text_item(corpse, 'CORPSE', Color3.fromRGB(143, 188, 143));
+	end;
+end;
+
+for _, crate in pairs(GetCrates()) do
+	if (crate and not itemCache[crate]) then
+		esp_lib:add_text_item(crate, 'TRANSPORT CRATE', Color3.fromRGB(255, 255, 0));
+	end;
+end;
+
+for _, drop in pairs(GetSupplyDrops()) do
+	if (drop and not itemCache[drop]) then
+		esp_lib:add_text_item(drop, 'SUPPLY DROP', Color3.fromRGB(175, 148, 131));
+	end;
+end;
+
+for _, v in next, Classes.Player.EntityMap do
+	if (v.type == 'ATV' and v.model) then
+		if (not itemCache[v.model]) then
+			esp_lib:add_text_item(v.model, 'ATV', Color3.fromRGB(255, 165, 0));
+			table.insert(activeAtvs, v.model);
+		end;
+
+		break;
+	end;
+end;
+
+--// Main loop
+RunService.Heartbeat:Connect(function()
+	for character, objects in pairs(playerCache) do
+		if (character and character:FindFirstChild('HumanoidRootPart')) then
+			local root = character.HumanoidRootPart;
+
+			local boxPosition, boxSize, isRendered = BoxMath(root);
+			local position, onscreen = Camera:WorldToViewportPoint((root.CFrame * CFrame.new(0, 3, 0)).Position);
+
+			if (objects.text) then
+				for _, v in next, Classes.Player.EntityMap do
+					if (v.type == 'Player' and v.id and v.model == character) then
+						local resolvedName = resolveName(v.id);
+
+						if (not resolvedName) then
+							if (v.id and v.name) then
+								InSessionNames[v.id] = v.name;
+							end;
+						end;
+
+						objects.text.Text = tostring(resolvedName) ~= 'nil' and resolvedName:upper() or tostring(InSessionNames[v.id]) ~= 'nil' and tostring(InSessionNames[v.id]):upper() or 'SURVIVOR';
+
+						break; -- if error delete semicolon
+					elseif (v.type == 'Soldier' and v.id and v.model == character) then
+						objects.text.Text = 'AI';
+						break;
+					end;
+				end;
+
+				objects.text.Position = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 15);
+				objects.text.Visible = isRendered;
+			end;
+
+			if (objects.box) then
+				objects.box.Size = boxSize;
+				objects.box.Position = boxPosition;
+				objects.box.Visible = false;
+			end;
+
+			local Weapon = PlayerWeapon(character);
+			if (objects.weapon) then
+				objects.weapon.Text = tostring(Weapon):upper();
+				objects.weapon.Position = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 5);
+				objects.weapon.Visible = isRendered;
+			end;
+
+			local distanceValue = (root.Position - Camera.CFrame.Position).Magnitude;
+			local distanceInMeters = distanceValue * 0.282;
+
+			if (objects.distance) then
+				objects.distance.Text = string.format("%.1f METERS", distanceInMeters);
+				objects.distance.Position = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 20);
+				objects.distance.Visible = isRendered;
+			end;
+
+			local health = character:FindFirstChild('Humanoid') and character.Humanoid.Health or 100;
+			local maxHealth = character:FindFirstChild('Humanoid') and character.Humanoid.MaxHealth or 100;
+
+			if (objects.health) then
+				objects.health.Size = Vector2.new(4.8, boxSize.Y);
+				objects.health.Position = Vector2.new(boxPosition.X - 7, boxPosition.Y);
+				objects.health.Visible = isRendered;
+			end;
+
+			if (objects.healthFill) then
+				local healthPercent = health / maxHealth;
+				local fillHeight = boxSize.Y * healthPercent;
+				objects.healthFill.Size = Vector2.new(4.8, fillHeight);
+				objects.healthFill.Position = Vector2.new(boxPosition.X - 7, boxPosition.Y + boxSize.Y - fillHeight);
+
+				local greenComponent = math.clamp(255 * (2 * healthPercent), 0, 255);
+				local redComponent = math.clamp(255 * (2 * (1 - healthPercent)), 0, 255);
+				objects.healthFill.Color = Color3.fromRGB(redComponent, greenComponent, 0);
+
+				objects.healthFill.Visible = isRendered;
+			end;
+
+			if (objects.healthOutline) then
+				objects.healthOutline.Size = Vector2.new(5, boxSize.Y + 1);
+				objects.healthOutline.Position = Vector2.new(boxPosition.X - 6.5, boxPosition.Y);
+				objects.healthOutline.Visible = isRendered;
+			end;
+
+			if (objects.healthText) then
+				objects.healthText.Text = string.format("%d%%", health);
+				objects.healthText.Position = Vector2.new(objects.healthFill.Position.X - 16, objects.healthFill.Position.Y - 4);
+
+				local healthPercent = health / maxHealth;
+				local greenComponent = math.clamp(255 * (2 * healthPercent), 0, 255);
+				local redComponent = math.clamp(255 * (2 * (1 - healthPercent)), 0, 255);
+				objects.healthText.Color = Color3.fromRGB(redComponent, greenComponent, 0);
+
+				objects.healthText.Visible = isRendered;
+			end;
+
+			UpdateSkeletonLimbs(character, objects.skeletonLimbs);
+
+			if (health <= 0 or not character:FindFirstChild('HumanoidRootPart') or IsSleeping(character)) then
+				objects.text.Visible = false;
+				objects.box.Visible = false;
+				objects.weapon.Visible = false;
+				objects.distance.Visible = false;
+				objects.health.Visible = false;
+				objects.healthFill.Visible = false;
+				objects.healthOutline.Visible = false;
+				objects.healthText.Visible = false;
+
+				for _, limb in pairs(objects.skeletonLimbs) do
+					limb.Visible = false;
+				end;
+			end;
+		end;
+	end;
+
+	for item, objects in pairs(itemCache) do
+		if (item) then
+			local root = item.PrimaryPart;
+
+			if (root) then
+				local position, onScreen = Camera:WorldToViewportPoint(root.Position);
+
+				if (objects.text) then
+					objects.text.Position = Vector2.new(position.X, position.Y - 15);
+					objects.text.Visible = onScreen;
+				end;
+
+				local distanceValue = (root.Position - Camera.CFrame.Position).Magnitude;
+				local distanceInMeters = distanceValue * 0.400;
+
+				if (objects.distance) then
+					objects.distance.Text = string.format("%.1f METERS", distanceInMeters);
+					objects.distance.Position = Vector2.new(position.X, position.Y);
+					objects.distance.Visible = onScreen;
+				end;
+			else
+				if (objects.text) then objects.text.Visible = false end;
+				if (objects.distance) then objects.distance.Visible = false end;
+			end;
+		end;
+	end;
+
+	esp_lib:update_targeted_esp_color();
+
+	fovCircle.Radius = baseRadius * (math.tan(math.rad(70)) / math.tan(math.rad(Camera.FieldOfView))) ^ 0.8;
+	fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2);
+end);
