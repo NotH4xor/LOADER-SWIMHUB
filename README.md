@@ -10,6 +10,7 @@ local scripts = {
     'https://raw.githubusercontent.com/1337h4xx/1/main/FullBright%20Loop%20Bypass',
     'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/Bighead',
     'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/Silentaim',
+    'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/VisibleESP',
 -- Removed AmongusHook
 }
 
