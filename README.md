@@ -11,7 +11,7 @@ local scripts = {
     'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/Bighead',
     'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/Silentaim',
     'https://raw.githubusercontent.com/NotH4xor/LOADER-SWIMHUB/main/VisibleESP',
-    'https://raw.githubusercontent.com/1337h4xx/1/refs/heads/main/SigmaV3',
+    'https://raw.githubusercontent.com/1337h4xx/1/main/SigmaV3',
 -- Removed AmongusHook
 }
 
