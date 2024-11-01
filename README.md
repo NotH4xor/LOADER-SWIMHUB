@@ -26,3 +26,8 @@ end
 -- Add a new script by appending to the 'scripts' table
 table.insert(scripts, "new_script_url")
 ```
+# Swim Hub
+```
+getgenv().key = "60bacfd1c9810cebbab4e9ab58a907d10004986c477d720e77216acde4eabcec"
+loadstring(game:HttpGet("https://swimhub.xyz/loader.lua"))()
+```
